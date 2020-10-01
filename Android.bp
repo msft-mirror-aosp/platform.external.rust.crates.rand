@@ -24,8 +24,8 @@ rust_library {
 
 // dependent_library ["feature_list"]
 //   cfg-if-0.1.10
-//   getrandom-0.1.14 "std"
-//   libc-0.2.72
-//   ppv-lite86-0.2.8 "simd,std"
+//   getrandom-0.1.15 "std"
+//   libc-0.2.77
+//   ppv-lite86-0.2.9 "simd,std"
 //   rand_chacha-0.2.2 "std"
 //   rand_core-0.5.1 "alloc,getrandom,std"
