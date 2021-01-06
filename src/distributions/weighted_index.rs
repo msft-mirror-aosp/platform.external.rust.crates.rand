@@ -7,16 +7,6 @@
 // except according to those terms.
 
 //! Weighted index sampling
-//!
-//! This module provides two implementations for sampling indices:
-//!
-//! *   [`WeightedIndex`] allows `O(log N)` sampling
-//! *   [`alias_method::WeightedIndex`] allows `O(1)` sampling, but with
-//!      much greater set-up cost
-//!      
-//! [`alias_method::WeightedIndex`]: alias_method/struct.WeightedIndex.html
-
-pub mod alias_method;
 
 use crate::distributions::uniform::{SampleBorrow, SampleUniform, UniformSampler};
 use crate::distributions::Distribution;
@@ -25,10 +15,12 @@ use core::cmp::PartialOrd;
 use core::fmt;
 
 // Note that this whole module is only imported if feature="alloc" is enabled.
-#[cfg(not(feature = "std"))] use crate::alloc::vec::Vec;
+use alloc::vec::Vec;
 
-/// A distribution using weighted sampling to pick a discretely selected
-/// item.
+#[cfg(feature = "serde1")]
+use serde::{Serialize, Deserialize};
+
+/// A distribution using weighted sampling of discrete items
 ///
 /// Sampling a `WeightedIndex` distribution returns the index of a randomly
 /// selected element from the iterator used when the `WeightedIndex` was
@@ -38,6 +30,11 @@ use core::fmt;
 ///
 /// # Performance
 ///
+/// Time complexity of sampling from `WeightedIndex` is `O(log N)` where
+/// `N` is the number of weights. As an alternative,
+/// [`rand_distr::weighted_alias`](https://docs.rs/rand_distr/*/rand_distr/weighted_alias/index.html)
+/// supports `O(1)` sampling, but with much higher initialisation cost.
+///
 /// A `WeightedIndex<X>` contains a `Vec<X>` and a [`Uniform<X>`] and so its
 /// size is the sum of the size of those objects, possibly plus some alignment.
 ///
@@ -46,15 +43,12 @@ use core::fmt;
 /// `Vec` doesn't guarantee a particular growth strategy, additional memory
 /// might be allocated but not used. Since the `WeightedIndex` object also
 /// contains, this might cause additional allocations, though for primitive
-/// types, ['Uniform<X>`] doesn't allocate any memory.
-///
-/// Time complexity of sampling from `WeightedIndex` is `O(log N)` where
-/// `N` is the number of weights.
+/// types, [`Uniform<X>`] doesn't allocate any memory.
 ///
 /// Sampling from `WeightedIndex` will result in a single call to
 /// `Uniform<X>::sample` (method of the [`Distribution`] trait), which typically
 /// will request a single value from the underlying [`RngCore`], though the
-/// exact number depends on the implementaiton of `Uniform<X>::sample`.
+/// exact number depends on the implementation of `Uniform<X>::sample`.
 ///
 /// # Example
 ///
@@ -79,9 +73,11 @@ use core::fmt;
 /// }
 /// ```
 ///
-/// [`Uniform<X>`]: crate::distributions::uniform::Uniform
+/// [`Uniform<X>`]: crate::distributions::Uniform
 /// [`RngCore`]: crate::RngCore
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde1", derive(Serialize, Deserialize))]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "alloc")))]
 pub struct WeightedIndex<X: SampleUniform + PartialOrd> {
     cumulative_weights: Vec<X>,
     total_weight: X,
@@ -107,13 +103,15 @@ impl<X: SampleUniform + PartialOrd> WeightedIndex<X> {
         let mut total_weight: X = iter.next().ok_or(WeightedError::NoItem)?.borrow().clone();
 
         let zero = <X as Default>::default();
-        if total_weight < zero {
+        if !(total_weight >= zero) {
             return Err(WeightedError::InvalidWeight);
         }
 
         let mut weights = Vec::<X>::with_capacity(iter.size_hint().0);
         for w in iter {
-            if *w.borrow() < zero {
+            // Note that `!(w >= x)` is not equivalent to `w < x` for partially
+            // ordered types due to NaNs which are equal to nothing.
+            if !(w.borrow() >= &zero) {
                 return Err(WeightedError::InvalidWeight);
             }
             weights.push(total_weight.clone());
@@ -163,10 +161,10 @@ impl<X: SampleUniform + PartialOrd> WeightedIndex<X> {
                     return Err(WeightedError::InvalidWeight);
                 }
             }
-            if *w < zero {
+            if !(*w >= zero) {
                 return Err(WeightedError::InvalidWeight);
             }
-            if i >= self.cumulative_weights.len() + 1 {
+            if i > self.cumulative_weights.len() {
                 return Err(WeightedError::TooMany);
             }
 
@@ -183,7 +181,7 @@ impl<X: SampleUniform + PartialOrd> WeightedIndex<X> {
             total_weight += w;
             prev_i = Some(i);
         }
-        if total_weight == zero {
+        if total_weight <= zero {
             return Err(WeightedError::AllWeightsZero);
         }
 
@@ -244,6 +242,47 @@ where X: SampleUniform + PartialOrd
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[cfg(feature = "serde1")]
+    #[test]
+    fn test_weightedindex_serde1() {
+        let weighted_index = WeightedIndex::new(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).unwrap();
+
+        let ser_weighted_index = bincode::serialize(&weighted_index).unwrap();
+        let de_weighted_index: WeightedIndex<i32> =
+            bincode::deserialize(&ser_weighted_index).unwrap();
+
+        assert_eq!(
+            de_weighted_index.cumulative_weights,
+            weighted_index.cumulative_weights
+        );
+        assert_eq!(de_weighted_index.total_weight, weighted_index.total_weight);
+    }
+
+    #[test]
+    fn test_accepting_nan(){
+        assert_eq!(
+            WeightedIndex::new(&[core::f32::NAN, 0.5]).unwrap_err(),
+            WeightedError::InvalidWeight,
+        );
+        assert_eq!(
+            WeightedIndex::new(&[core::f32::NAN]).unwrap_err(),
+            WeightedError::InvalidWeight,
+        );
+        assert_eq!(
+            WeightedIndex::new(&[0.5, core::f32::NAN]).unwrap_err(),
+            WeightedError::InvalidWeight,
+        );
+
+        assert_eq!(
+            WeightedIndex::new(&[0.5, 7.0])
+                .unwrap()
+                .update_weights(&[(0, &core::f32::NAN)])
+                .unwrap_err(),
+            WeightedError::InvalidWeight,
+        )
+    }
+
 
     #[test]
     #[cfg_attr(miri, ignore)] // Miri is too slow
@@ -382,13 +421,14 @@ mod test {
 }
 
 /// Error type returned from `WeightedIndex::new`.
+#[cfg_attr(doc_cfg, doc(cfg(feature = "alloc")))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WeightedError {
     /// The provided weight collection contains no items.
     NoItem,
 
-    /// A weight is either less than zero, greater than the supported maximum or
-    /// otherwise invalid.
+    /// A weight is either less than zero, greater than the supported maximum,
+    /// NaN, or otherwise invalid.
     InvalidWeight,
 
     /// All items in the provided weight collection are zero.
