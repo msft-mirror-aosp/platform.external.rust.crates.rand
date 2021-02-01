@@ -10,12 +10,13 @@ rust_library {
         "alloc",
         "default",
         "getrandom",
-        "getrandom_package",
         "libc",
+        "rand_chacha",
+        "rand_hc",
         "std",
+        "std_rng",
     ],
     rustlibs: [
-        "libgetrandom",
         "liblibc",
         "librand_chacha",
         "librand_core",
@@ -23,9 +24,9 @@ rust_library {
 }
 
 // dependent_library ["feature_list"]
-//   cfg-if-0.1.10
-//   getrandom-0.1.15 "std"
-//   libc-0.2.77
-//   ppv-lite86-0.2.9 "simd,std"
-//   rand_chacha-0.2.2 "std"
-//   rand_core-0.5.1 "alloc,getrandom,std"
+//   cfg-if-1.0.0
+//   getrandom-0.2.1 "std"
+//   libc-0.2.82
+//   ppv-lite86-0.2.10 "simd,std"
+//   rand_chacha-0.3.0 "std"
+//   rand_core-0.6.1 "alloc,getrandom,std"
