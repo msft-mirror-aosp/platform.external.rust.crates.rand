@@ -212,7 +212,11 @@ pub trait SliceRandom {
     /// println!("{:?}", choices.choose_multiple_weighted(&mut rng, 2, |item| item.1).unwrap().collect::<Vec<_>>());
     /// ```
     /// [`choose_multiple`]: SliceRandom::choose_multiple
-    #[cfg(feature = "alloc")]
+    //
+    // Note: this is feature-gated on std due to usage of f64::powf.
+    // If necessary, we may use alloc+libm as an alternative (see PR #1089).
+    #[cfg(feature = "std")]
+    #[cfg_attr(doc_cfg, doc(cfg(feature = "std")))]
     fn choose_multiple_weighted<R, F, X>(
         &self, rng: &mut R, amount: usize, weight: F,
     ) -> Result<SliceChooseIter<Self, Self::Item>, WeightedError>
@@ -556,7 +560,7 @@ impl<T> SliceRandom for [T] {
         Ok(&mut self[distr.sample(rng)])
     }
 
-    #[cfg(feature = "alloc")]
+    #[cfg(feature = "std")]
     fn choose_multiple_weighted<R, F, X>(
         &self, rng: &mut R, amount: usize, weight: F,
     ) -> Result<SliceChooseIter<Self, Self::Item>, WeightedError>
@@ -987,8 +991,8 @@ mod test {
                 move_last(&mut arr, pos);
                 assert_eq!(arr[3], i);
             }
-            for i in 0..4 {
-                assert_eq!(arr[i], i);
+            for (i, &a) in arr.iter().enumerate() {
+                assert_eq!(a, i);
             }
             counts[permutation] += 1;
         }
@@ -1228,7 +1232,7 @@ mod test {
     }
 
     #[test]
-    #[cfg(feature = "alloc")]
+    #[cfg(feature = "std")]
     fn test_multiple_weighted_edge_cases() {
         use super::*;
 
@@ -1308,7 +1312,7 @@ mod test {
     }
 
     #[test]
-    #[cfg(feature = "alloc")]
+    #[cfg(feature = "std")]
     fn test_multiple_weighted_distributions() {
         use super::*;
 

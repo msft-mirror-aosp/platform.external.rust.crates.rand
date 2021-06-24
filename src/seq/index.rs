@@ -17,7 +17,9 @@ use alloc::collections::BTreeSet;
 #[cfg(feature = "std")] use std::collections::HashSet;
 
 #[cfg(feature = "alloc")]
-use crate::distributions::{uniform::SampleUniform, Distribution, Uniform, WeightedError};
+use crate::distributions::{uniform::SampleUniform, Distribution, Uniform};
+#[cfg(feature = "std")]
+use crate::distributions::WeightedError;
 use crate::Rng;
 
 #[cfg(feature = "serde1")]
@@ -270,6 +272,8 @@ where R: Rng + ?Sized {
 /// `O(length + amount * log length)` time otherwise.
 ///
 /// Panics if `amount > length`.
+#[cfg(feature = "std")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "std")))]
 pub fn sample_weighted<R, F, X>(
     rng: &mut R, length: usize, weight: F, amount: usize,
 ) -> Result<IndexVec, WeightedError>
@@ -301,6 +305,7 @@ where
 /// + amount * log length)` time otherwise.
 ///
 /// Panics if `amount > length`.
+#[cfg(feature = "std")]
 fn sample_efraimidis_spirakis<R, F, X, N>(
     rng: &mut R, length: N, weight: F, amount: N,
 ) -> Result<IndexVec, WeightedError>
@@ -375,9 +380,6 @@ where
 
     #[cfg(not(feature = "nightly"))]
     {
-        #[cfg(all(feature = "alloc", not(feature = "std")))]
-        use crate::alloc::collections::BinaryHeap;
-        #[cfg(feature = "std")]
         use std::collections::BinaryHeap;
 
         // Partially sort the array such that the `amount` elements with the largest
@@ -619,6 +621,7 @@ mod test {
         assert_eq!(v1, v2);
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_sample_weighted() {
         let seed_rng = crate::test::rng;
@@ -627,7 +630,7 @@ mod test {
             match v {
                 IndexVec::U32(mut indices) => {
                     assert_eq!(indices.len(), amount);
-                    indices.sort();
+                    indices.sort_unstable();
                     indices.dedup();
                     assert_eq!(indices.len(), amount);
                     for &i in &indices {
@@ -665,10 +668,10 @@ mod test {
         do_test(300, 80, &[31, 289, 248, 154, 5, 78, 19, 286]); // inplace
         do_test(300, 180, &[31, 289, 248, 154, 5, 78, 19, 286]); // inplace
 
-        do_test(1000_000, 8, &[
+        do_test(1_000_000, 8, &[
             103717, 963485, 826422, 509101, 736394, 807035, 5327, 632573,
         ]); // floyd
-        do_test(1000_000, 180, &[
+        do_test(1_000_000, 180, &[
             103718, 963490, 826426, 509103, 736396, 807036, 5327, 632573,
         ]); // rejection
     }
