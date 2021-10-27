@@ -42,6 +42,8 @@ rust_library {
     name: "librand",
     host_supported: true,
     crate_name: "rand",
+    cargo_env_compat: true,
+    cargo_pkg_version: "0.8.4",
     srcs: ["src/lib.rs"],
     edition: "2018",
     features: [
@@ -51,6 +53,7 @@ rust_library {
         "libc",
         "rand_chacha",
         "rand_hc",
+        "small_rng",
         "std",
         "std_rng",
     ],
@@ -60,11 +63,3 @@ rust_library {
         "librand_core",
     ],
 }
-
-// dependent_library ["feature_list"]
-//   cfg-if-1.0.0
-//   getrandom-0.2.3 "std"
-//   libc-0.2.97
-//   ppv-lite86-0.2.10 "simd,std"
-//   rand_chacha-0.3.1 "std"
-//   rand_core-0.6.3 "alloc,getrandom,std"
