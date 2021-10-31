@@ -1,5 +1,6 @@
 {
   "dependencies": true,
   "device": true,
-  "run": true
+  "run": true,
+  "features": "default,small_rng"
 }
