@@ -62,4 +62,8 @@ rust_library {
         "librand_chacha",
         "librand_core",
     ],
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.virt",
+    ],
 }
