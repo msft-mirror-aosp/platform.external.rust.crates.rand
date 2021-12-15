@@ -5,6 +5,6 @@
   ],
   "dependencies": true,
   "device": true,
-  "run": true,
-  "features": "default,small_rng"
+  "features": "default,small_rng",
+  "run": true
 }
