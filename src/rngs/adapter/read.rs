@@ -9,8 +9,6 @@
 
 //! A wrapper around any Read to treat it as an RNG.
 
-#![allow(deprecated)]
-
 use std::fmt;
 use std::io::Read;
 
@@ -32,10 +30,20 @@ use rand_core::{impls, Error, RngCore};
 /// have enough data, will only be reported through [`try_fill_bytes`].
 /// The other [`RngCore`] methods will panic in case of an error.
 ///
+/// # Example
+///
+/// ```
+/// use rand::Rng;
+/// use rand::rngs::adapter::ReadRng;
+///
+/// let data = vec![1, 2, 3, 4, 5, 6, 7, 8];
+/// let mut rng = ReadRng::new(&data[..]);
+/// println!("{:x}", rng.gen::<u32>());
+/// ```
+///
 /// [`OsRng`]: crate::rngs::OsRng
 /// [`try_fill_bytes`]: RngCore::try_fill_bytes
 #[derive(Debug)]
-#[deprecated(since="0.8.4", note="removal due to lack of usage")]
 pub struct ReadRng<R> {
     reader: R,
 }
@@ -78,7 +86,6 @@ impl<R: Read> RngCore for ReadRng<R> {
 
 /// `ReadRng` error type
 #[derive(Debug)]
-#[deprecated(since="0.8.4")]
 pub struct ReadError(std::io::Error);
 
 impl fmt::Display for ReadError {
