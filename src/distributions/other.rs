@@ -10,19 +10,12 @@
 
 use core::char;
 use core::num::Wrapping;
-#[cfg(feature = "alloc")]
-use alloc::string::String;
 
 use crate::distributions::{Distribution, Standard, Uniform};
-#[cfg(feature = "alloc")]
-use crate::distributions::DistString;
 use crate::Rng;
 
 #[cfg(feature = "serde1")]
 use serde::{Serialize, Deserialize};
-#[cfg(feature = "min_const_gen")]
-use std::mem::{self, MaybeUninit};
-
 
 // ----- Sampling distributions -----
 
@@ -61,7 +54,7 @@ use std::mem::{self, MaybeUninit};
 ///
 /// - [Wikipedia article on Password Strength](https://en.wikipedia.org/wiki/Password_strength)
 /// - [Diceware for generating memorable passwords](https://en.wikipedia.org/wiki/Diceware)
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 #[cfg_attr(feature = "serde1", derive(Serialize, Deserialize))]
 pub struct Alphanumeric;
 
@@ -89,19 +82,6 @@ impl Distribution<char> for Standard {
     }
 }
 
-/// Note: the `String` is potentially left with excess capacity; optionally the
-/// user may call `string.shrink_to_fit()` afterwards.
-#[cfg(feature = "alloc")]
-impl DistString for Standard {
-    fn append_string<R: Rng + ?Sized>(&self, rng: &mut R, s: &mut String, len: usize) {
-        // A char is encoded with at most four bytes, thus this reservation is
-        // guaranteed to be sufficient. We do not shrink_to_fit afterwards so
-        // that repeated usage on the same `String` buffer does not reallocate.
-        s.reserve(4 * len);
-        s.extend(Distribution::<char>::sample_iter(self, rng).take(len));
-    }
-}
-
 impl Distribution<u8> for Alphanumeric {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> u8 {
         const RANGE: u32 = 26 + 26 + 10;
@@ -117,16 +97,6 @@ impl Distribution<u8> for Alphanumeric {
             if var < RANGE {
                 return GEN_ASCII_STR_CHARSET[var as usize];
             }
-        }
-    }
-}
-
-#[cfg(feature = "alloc")]
-impl DistString for Alphanumeric {
-    fn append_string<R: Rng + ?Sized>(&self, rng: &mut R, string: &mut String, len: usize) {
-        unsafe {
-            let v = string.as_mut_vec();
-            v.extend(self.sample_iter(rng).take(len));
         }
     }
 }
@@ -186,23 +156,6 @@ tuple_impl! {A, B, C, D, E, F, G, H, I, J}
 tuple_impl! {A, B, C, D, E, F, G, H, I, J, K}
 tuple_impl! {A, B, C, D, E, F, G, H, I, J, K, L}
 
-#[cfg(feature = "min_const_gen")]
-impl<T, const N: usize> Distribution<[T; N]> for Standard
-where Standard: Distribution<T>
-{
-    #[inline]
-    fn sample<R: Rng + ?Sized>(&self, _rng: &mut R) -> [T; N] {
-        let mut buff: [MaybeUninit<T>; N] = unsafe { MaybeUninit::uninit().assume_init() };
-
-        for elem in &mut buff {
-            *elem = MaybeUninit::new(_rng.gen());
-        }
-
-        unsafe { mem::transmute_copy::<_, _>(&buff) }
-    }
-}
-
-#[cfg(not(feature = "min_const_gen"))]
 macro_rules! array_impl {
     // recursive, given at least one type parameter:
     {$n:expr, $t:ident, $($ts:ident,)*} => {
@@ -223,7 +176,6 @@ macro_rules! array_impl {
     };
 }
 
-#[cfg(not(feature = "min_const_gen"))]
 array_impl! {32, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T,}
 
 impl<T> Distribution<Option<T>> for Standard
@@ -276,7 +228,7 @@ mod tests {
             .map(|()| rng.gen::<char>())
             .take(1000)
             .collect();
-        assert!(!word.is_empty());
+        assert!(word.len() != 0);
     }
 
     #[test]
@@ -288,11 +240,11 @@ mod tests {
         let mut incorrect = false;
         for _ in 0..100 {
             let c: char = rng.sample(Alphanumeric).into();
-            incorrect |= !(('0'..='9').contains(&c) ||
-                           ('A'..='Z').contains(&c) ||
-                           ('a'..='z').contains(&c) );
+            incorrect |= !((c >= '0' && c <= '9') ||
+                           (c >= 'A' && c <= 'Z') ||
+                           (c >= 'a' && c <= 'z') );
         }
-        assert!(!incorrect);
+        assert!(incorrect == false);
     }
 
     #[test]
