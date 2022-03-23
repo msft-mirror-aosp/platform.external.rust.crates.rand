@@ -80,10 +80,7 @@
 //!         where B1: SampleBorrow<Self::X> + Sized,
 //!               B2: SampleBorrow<Self::X> + Sized
 //!     {
-//!         UniformMyF32(UniformFloat::<f32>::new_inclusive(
-//!             low.borrow().0,
-//!             high.borrow().0,
-//!         ))
+//!         UniformSampler::new(low, high)
 //!     }
 //!     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Self::X {
 //!         MyF32(self.0.sample(rng))
@@ -106,7 +103,8 @@
 //! [`UniformDuration`]: crate::distributions::uniform::UniformDuration
 //! [`SampleBorrow::borrow`]: crate::distributions::uniform::SampleBorrow::borrow
 
-use core::time::Duration;
+#[cfg(not(feature = "std"))] use core::time::Duration;
+#[cfg(feature = "std")] use std::time::Duration;
 use core::ops::{Range, RangeInclusive};
 
 use crate::distributions::float::IntoFloat;
@@ -160,7 +158,7 @@ use serde::{Serialize, Deserialize};
 /// println!("{}", sum);
 /// ```
 ///
-/// For a single sample, [`Rng::gen_range`] may be preferred:
+/// For a single sample, [`Rng::gen_range`] may be prefered:
 ///
 /// ```
 /// use rand::Rng;
@@ -172,10 +170,8 @@ use serde::{Serialize, Deserialize};
 /// [`new`]: Uniform::new
 /// [`new_inclusive`]: Uniform::new_inclusive
 /// [`Rng::gen_range`]: Rng::gen_range
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug)]
 #[cfg_attr(feature = "serde1", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "serde1", serde(bound(serialize = "X::Sampler: Serialize")))]
-#[cfg_attr(feature = "serde1", serde(bound(deserialize = "X::Sampler: Deserialize<'de>")))]
 pub struct Uniform<X: SampleUniform>(X::Sampler);
 
 impl<X: SampleUniform> Uniform<X> {
@@ -418,7 +414,7 @@ impl<T: SampleUniform + PartialOrd> SampleRange<T> for RangeInclusive<T> {
 /// An alternative to using a modulus is widening multiply: After a widening
 /// multiply by `range`, the result is in the high word. Then comparing the low
 /// word against `zone` makes sure our distribution is uniform.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug)]
 #[cfg_attr(feature = "serde1", derive(Serialize, Deserialize))]
 pub struct UniformInt<X> {
     low: X,
@@ -560,6 +556,7 @@ uniform_int_impl! { i8, u8, u32 }
 uniform_int_impl! { i16, u16, u32 }
 uniform_int_impl! { i32, u32, u32 }
 uniform_int_impl! { i64, u64, u64 }
+#[cfg(not(target_os = "emscripten"))]
 uniform_int_impl! { i128, u128, u128 }
 uniform_int_impl! { isize, usize, usize }
 uniform_int_impl! { u8, u8, u32 }
@@ -567,6 +564,7 @@ uniform_int_impl! { u16, u16, u32 }
 uniform_int_impl! { u32, u32, u32 }
 uniform_int_impl! { u64, u64, u64 }
 uniform_int_impl! { usize, usize, usize }
+#[cfg(not(target_os = "emscripten"))]
 uniform_int_impl! { u128, u128, u128 }
 
 #[cfg(feature = "simd_support")]
@@ -806,7 +804,7 @@ impl UniformSampler for UniformChar {
 /// [`new`]: UniformSampler::new
 /// [`new_inclusive`]: UniformSampler::new_inclusive
 /// [`Standard`]: crate::distributions::Standard
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug)]
 #[cfg_attr(feature = "serde1", derive(Serialize, Deserialize))]
 pub struct UniformFloat<X> {
     low: X,
@@ -829,21 +827,16 @@ macro_rules! uniform_float_impl {
             {
                 let low = *low_b.borrow();
                 let high = *high_b.borrow();
-                debug_assert!(
-                    low.all_finite(),
-                    "Uniform::new called with `low` non-finite."
-                );
-                debug_assert!(
-                    high.all_finite(),
-                    "Uniform::new called with `high` non-finite."
-                );
                 assert!(low.all_lt(high), "Uniform::new called with `low >= high`");
+                assert!(
+                    low.all_finite() && high.all_finite(),
+                    "Uniform::new called with non-finite boundaries"
+                );
                 let max_rand = <$ty>::splat(
                     (::core::$u_scalar::MAX >> $bits_to_discard).into_float_with_exponent(0) - 1.0,
                 );
 
                 let mut scale = high - low;
-                assert!(scale.all_finite(), "Uniform::new: range overflow");
 
                 loop {
                     let mask = (scale * max_rand + low).ge_mask(high);
@@ -865,24 +858,19 @@ macro_rules! uniform_float_impl {
             {
                 let low = *low_b.borrow();
                 let high = *high_b.borrow();
-                debug_assert!(
-                    low.all_finite(),
-                    "Uniform::new_inclusive called with `low` non-finite."
-                );
-                debug_assert!(
-                    high.all_finite(),
-                    "Uniform::new_inclusive called with `high` non-finite."
-                );
                 assert!(
                     low.all_le(high),
                     "Uniform::new_inclusive called with `low > high`"
+                );
+                assert!(
+                    low.all_finite() && high.all_finite(),
+                    "Uniform::new_inclusive called with non-finite boundaries"
                 );
                 let max_rand = <$ty>::splat(
                     (::core::$u_scalar::MAX >> $bits_to_discard).into_float_with_exponent(0) - 1.0,
                 );
 
                 let mut scale = (high - low) / max_rand;
-                assert!(scale.all_finite(), "Uniform::new_inclusive: range overflow");
 
                 loop {
                     let mask = (scale * max_rand + low).gt_mask(high);
@@ -921,20 +909,11 @@ macro_rules! uniform_float_impl {
             {
                 let low = *low_b.borrow();
                 let high = *high_b.borrow();
-                debug_assert!(
-                    low.all_finite(),
-                    "UniformSampler::sample_single called with `low` non-finite."
-                );
-                debug_assert!(
-                    high.all_finite(),
-                    "UniformSampler::sample_single called with `high` non-finite."
-                );
                 assert!(
                     low.all_lt(high),
                     "UniformSampler::sample_single: low >= high"
                 );
                 let mut scale = high - low;
-                assert!(scale.all_finite(), "UniformSampler::sample_single: range overflow");
 
                 loop {
                     // Generate a value in the range [1, 2)
@@ -1155,7 +1134,7 @@ mod tests {
     #[test]
     #[cfg(feature = "serde1")]
     fn test_serialization_uniform_duration() {
-        let distr = UniformDuration::new(Duration::from_secs(10), Duration::from_secs(60));
+        let distr = UniformDuration::new(std::time::Duration::from_secs(10), std::time::Duration::from_secs(60));
         let de_distr: UniformDuration = bincode::deserialize(&bincode::serialize(&distr).unwrap()).unwrap();
         assert_eq!(
             distr.offset, de_distr.offset
@@ -1226,7 +1205,7 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)] // Miri is too slow
     fn test_integers() {
-        use core::{i128, u128};
+        #[cfg(not(target_os = "emscripten"))] use core::{i128, u128};
         use core::{i16, i32, i64, i8, isize};
         use core::{u16, u32, u64, u8, usize};
 
@@ -1294,7 +1273,9 @@ mod tests {
                 );)*
             }};
         }
-        t!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize, i128, u128);
+        t!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize);
+        #[cfg(not(target_os = "emscripten"))]
+        t!(i128, u128);
 
         #[cfg(feature = "simd_support")]
         {
@@ -1316,7 +1297,7 @@ mod tests {
         let mut max = core::char::from_u32(0).unwrap();
         for _ in 0..100 {
             let c = rng.gen_range('A'..='Z');
-            assert!(('A'..='Z').contains(&c));
+            assert!('A' <= c && c <= 'Z');
             max = max.max(c);
         }
         assert_eq!(max, 'Z');
@@ -1347,8 +1328,12 @@ mod tests {
                     (-<$f_scalar>::from_bits(10), -<$f_scalar>::from_bits(1)),
                     (-<$f_scalar>::from_bits(5), 0.0),
                     (-<$f_scalar>::from_bits(7), -0.0),
-                    (0.1 * ::core::$f_scalar::MAX, ::core::$f_scalar::MAX),
-                    (-::core::$f_scalar::MAX * 0.2, ::core::$f_scalar::MAX * 0.7),
+                    (10.0, ::core::$f_scalar::MAX),
+                    (-100.0, ::core::$f_scalar::MAX),
+                    (-::core::$f_scalar::MAX / 5.0, ::core::$f_scalar::MAX),
+                    (-::core::$f_scalar::MAX, ::core::$f_scalar::MAX / 5.0),
+                    (-::core::$f_scalar::MAX * 0.8, ::core::$f_scalar::MAX * 0.7),
+                    (-::core::$f_scalar::MAX, ::core::$f_scalar::MAX),
                 ];
                 for &(low_scalar, high_scalar) in v.iter() {
                     for lane in 0..<$ty>::lanes() {
@@ -1428,19 +1413,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn test_float_overflow() {
-        let _ = Uniform::from(::core::f64::MIN..::core::f64::MAX);
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_float_overflow_single() {
-        let mut rng = crate::test::rng(252);
-        rng.gen_range(::core::f64::MIN..::core::f64::MAX);
-    }
-
-    #[test]
     #[cfg(all(
         feature = "std",
         not(target_arch = "wasm32"),
@@ -1505,6 +1477,9 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)] // Miri is too slow
     fn test_durations() {
+        #[cfg(not(feature = "std"))] use core::time::Duration;
+        #[cfg(feature = "std")] use std::time::Duration;
+
         let mut rng = crate::test::rng(253);
 
         let v = &[
@@ -1646,13 +1621,5 @@ mod tests {
                 Duration::new(3, 236507617),
             ],
         );
-    }
-
-    #[test]
-    fn uniform_distributions_can_be_compared() {
-        assert_eq!(Uniform::new(1.0, 2.0), Uniform::new(1.0, 2.0));
-
-        // To cover UniformInt
-        assert_eq!(Uniform::new(1 as u32, 2 as u32), Uniform::new(1 as u32, 2 as u32));
     }
 }
