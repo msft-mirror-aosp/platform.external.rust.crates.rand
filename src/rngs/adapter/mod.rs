@@ -11,6 +11,5 @@
 mod read;
 mod reseeding;
 
-#[allow(deprecated)]
 pub use self::read::{ReadError, ReadRng};
 pub use self::reseeding::ReseedingRng;
