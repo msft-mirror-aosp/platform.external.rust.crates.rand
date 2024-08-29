@@ -1,7 +1,0 @@
-{
-  "features": [
-    "default",
-    "small_rng"
-  ],
-  "run_cargo": false
-}
